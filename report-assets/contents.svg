@@ -1,0 +1,19 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='380' height='470' viewBox='0 0 380 470'>
+<defs><radialGradient id='g' cx='0.5' cy='0.45' r='0.8'><stop offset='0' stop-color='#5a5a5a'/><stop offset='1' stop-color='#111'/></radialGradient></defs>
+<rect width='380' height='470' fill='url(#g)'/>
+<rect x='120.0' y='115.0' width='140' height='240' rx='28' fill='none' stroke='#fff' stroke-opacity='0.25' stroke-width='14' stroke-dasharray='16.0 3'/>
+<rect x='92.0' y='79.0' width='196' height='312' rx='40' fill='none' stroke='#fff' stroke-opacity='0.40' stroke-width='14' stroke-dasharray='22.4 3'/>
+<rect x='68.0' y='49.0' width='244' height='372' rx='50' fill='none' stroke='#fff' stroke-opacity='0.55' stroke-width='6' stroke-dasharray='41.0 3'/>
+<rect x='44.0' y='21.0' width='292' height='428' rx='60' fill='none' stroke='#fff' stroke-opacity='0.70' stroke-width='14' stroke-dasharray='33.0 3'/>
+<rect x='146.0' y='143.0' width='88' height='184' fill='#2b2b2b' stroke='#fff' stroke-opacity='0.8' stroke-width='2'/>
+<line x1='146.0' y1='161.4' x2='234.0' y2='161.4' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='179.8' x2='234.0' y2='179.8' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='198.2' x2='234.0' y2='198.2' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='216.6' x2='234.0' y2='216.6' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='235.0' x2='234.0' y2='235.0' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='253.4' x2='234.0' y2='253.4' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='271.8' x2='234.0' y2='271.8' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='290.2' x2='234.0' y2='290.2' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<line x1='146.0' y1='308.6' x2='234.0' y2='308.6' stroke='#fff' stroke-opacity='0.5' stroke-width='1'/>
+<circle cx='190.0' cy='235.0' r='13' fill='none' stroke='#fff' stroke-opacity='0.8' stroke-width='2'/>
+</svg>
