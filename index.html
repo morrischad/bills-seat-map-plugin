@@ -500,7 +500,12 @@
     state.selected = id || '';
     applySelection();
     if (useSigma && state.cfg.selectedSection) {
-      try { client.config.setVariable(state.cfg.selectedSection, state.selected); }
+      // A list control receiving '' would filter to an empty string (hiding every row),
+      // so clearing calls setVariable with no values, which resets the control.
+      try {
+        if (state.selected) client.config.setVariable(state.cfg.selectedSection, state.selected);
+        else client.config.setVariable(state.cfg.selectedSection);
+      }
       catch (e) { console.warn('setVariable failed', e); }
     }
   }
