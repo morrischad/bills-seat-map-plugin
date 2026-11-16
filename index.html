@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bills Seat Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<!-- React is a peer dependency of the @sigmacomputing/plugin UMD bundle (it calls React.createContext at load). -->
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/@sigmacomputing/plugin@1.2.0/dist/umd/sigmacomputing-plugin.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<style>
+  :root{
+    --royal:#00338D; --red:#C60C30; --navy:#0C2340;
+    --ink:#0C2340; --muted:#5B6B85; --line:#E3E8F0; --bg:#FFFFFF; --nodata:#D5DAE2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg)}
+  body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+  #app{height:100%;width:100%;display:flex;flex-direction:column}
+
+  /* ---------- header ---------- */
+  header{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:10px 14px 8px;border-bottom:1px solid var(--line)}
+  .brandbar{width:5px;align-self:stretch;border-radius:3px;background:linear-gradient(180deg,var(--royal) 0 62%,var(--red) 62% 100%)}
+  .titles{min-width:0;flex:1}
+  .eyebrow{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--red);line-height:1.2}
+  h1{font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  h1 span{color:var(--muted);font-weight:500}
+  .hright{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .badge{font-size:10.5px;font-weight:600;color:#7A5A00;background:#FFF4D6;border:1px solid #F3DE9C;border-radius:999px;padding:3px 9px;white-space:nowrap}
+  .chip{display:none;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#fff;background:var(--red);border-radius:999px;padding:4px 6px 4px 10px;white-space:nowrap;box-shadow:0 2px 6px rgba(198,12,48,.25)}
+  .chip.on{display:inline-flex}
+  .chip button{border:0;background:rgba(255,255,255,.22);color:#fff;width:18px;height:18px;border-radius:50%;cursor:pointer;font-size:12px;line-height:18px;font-weight:700}
+  .chip button:hover{background:rgba(255,255,255,.4)}
+  .btn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:#fff;color:var(--ink);font:600 11.5px/1 inherit;font-family:inherit;border-radius:8px;padding:6px 9px;cursor:pointer;transition:background .15s,border-color .15s}
+  .btn:hover{background:#F4F7FB;border-color:#CBD5E3}
+  .btn svg{width:13px;height:13px}
+
+  /* ---------- stage ---------- */
+  #stage{flex:1 1 auto;min-height:0;position:relative}
+  #map{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+  #map:active{cursor:grabbing}
+  .sec{cursor:pointer;transform-box:fill-box;transform-origin:center;transition:transform .16s ease, opacity .25s ease}
+  .sec path{stroke:#fff;stroke-width:1.4;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .sec text{pointer-events:none;text-anchor:middle;dominant-baseline:central;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  svg.has-sel .sec:not(.selected):not(.hover){opacity:.5}
+  .overlay{pointer-events:none}
+  .ov{transform-box:fill-box;transform-origin:center;opacity:0;transition:opacity .12s ease}
+  .ov.on{opacity:1}
+  .ov text{text-anchor:middle;dominant-baseline:central;font-weight:800;font-variant-numeric:tabular-nums}
+  .ov-sel path{fill:none;stroke:var(--red);stroke-width:3;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .ov-hov{transform:scale(1.08)}
+  .ov-hov path{stroke:var(--navy);stroke-width:2.4;stroke-linejoin:round;vector-effect:non-scaling-stroke;filter:drop-shadow(0 3px 6px rgba(12,35,64,.38))}
+  .static{pointer-events:none}
+
+  #tip{position:absolute;pointer-events:none;z-index:10;min-width:190px;max-width:280px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(12,35,64,.18),0 2px 6px rgba(12,35,64,.08);opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s;overflow:hidden}
+  #tip.on{opacity:1;transform:none}
+  .tip-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px 8px;background:var(--navy);color:#fff}
+  .tip-sec{font-size:15px;font-weight:800;letter-spacing:-.01em}
+  .tip-lvl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.16)}
+  .tip-b{padding:9px 12px 10px}
+  .tip-metric{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .tip-metric .k{font-size:11px;color:var(--muted);font-weight:600}
+  .tip-metric .v{font-size:18px;font-weight:800;color:var(--royal);font-variant-numeric:tabular-nums}
+  .tip-rank{font-size:10.5px;color:var(--muted);margin-top:1px;text-align:right}
+  .tip-rows{margin-top:7px;border-top:1px solid var(--line);padding-top:6px;display:grid;grid-template-columns:auto auto;gap:3px 14px;font-size:11.5px}
+  .tip-rows .k{color:var(--muted)}
+  .tip-rows .v{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+  .tip-f{font-size:10px;color:var(--muted);padding:6px 12px;background:#F6F8FB;border-top:1px solid var(--line)}
+  .tip-nodata{font-size:12px;color:var(--muted);font-weight:600}
+
+  .compass{position:absolute;right:12px;bottom:10px;width:46px;height:46px;pointer-events:none;opacity:.9}
+  .hint{position:absolute;left:12px;bottom:10px;font-size:10.5px;color:var(--muted);pointer-events:none;background:rgba(255,255,255,.85);padding:3px 7px;border-radius:6px}
+
+  /* ---------- footer ---------- */
+  footer{flex:0 0 auto;display:flex;align-items:center;gap:18px;padding:7px 14px 9px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);min-height:36px}
+  .legend{display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:0;max-width:420px}
+  .legend .lt{font-weight:700;color:var(--ink);white-space:nowrap}
+  .ramp-wrap{flex:1;min-width:60px;display:flex;flex-direction:column;gap:2px}
+  .ramp{height:9px;border-radius:5px;border:1px solid rgba(12,35,64,.08)}
+  .ramp-l{display:flex;justify-content:space-between;font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+  .nd{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .nd i{width:11px;height:11px;border-radius:3px;background:var(--nodata);display:inline-block}
+  .tiers{display:flex;gap:6px;margin-left:auto;flex:0 1 auto;min-width:0}
+  .tier{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:9px;padding:4px 9px;white-space:nowrap}
+  .tier i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 auto;transition:background .6s}
+  .tier .n{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .tier .v{font-size:12px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+  .tier .s{font-size:9.5px;color:var(--muted)}
+
+  /* compact layouts */
+  #app.narrow .tiers .s{display:none}
+  #app.narrow .hint{display:none}
+  #app.narrow .legend .lt, #app.narrow #lmid, #app.narrow .nd{display:none}
+  #app.narrow footer{gap:10px}
+  #app.narrow .tier{padding:3px 7px}
+  #app.tiny .tiers{display:none}
+  #app.tiny .eyebrow{display:none}
+  #app.tiny .btn .bl{display:none}
+  #app.tiny .compass{width:34px;height:34px}
+  #app.short header{padding:6px 12px 5px}
+  #app.short footer{padding:4px 12px 6px;min-height:30px}
+  #app.short .eyebrow{display:none}
+  #app.short h1{font-size:14px}
+  #app.short .hint{display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brandbar"></div>
+    <div class="titles">
+      <div class="eyebrow">Stadium Seat Map</div>
+      <h1 id="title">Ticket Revenue <span>by section</span></h1>
+    </div>
+    <div class="hright">
+      <span class="chip" id="chip"><span id="chipText">Section</span><button id="chipClear" title="Clear selection" aria-label="Clear selection">&times;</button></span>
+      <span class="badge" id="badge" style="display:none">Sample data</span>
+      <button class="btn" id="reset" title="Reset zoom">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4"/><path d="M2.5 2.5v3h3"/></svg>
+        <span class="bl">Reset</span>
+      </button>
+    </div>
+  </header>
+  <div id="stage">
+    <svg id="map" role="img" aria-label="Stadium seat map"></svg>
+    <div id="tip"></div>
+    <div class="hint">Scroll to zoom &middot; drag to pan &middot; click a section to filter</div>
+    <svg class="compass" viewBox="-24 -24 48 48" aria-hidden="true">
+      <circle r="22" fill="#fff" stroke="#E3E8F0"/>
+      <path d="M-11 0 L0 -3.6 L0 3.6 Z" fill="#C60C30"/>
+      <path d="M11 0 L0 -3.6 L0 3.6 Z" fill="#B8C2D3"/>
+      <g font-family="Inter,sans-serif" text-anchor="middle" dominant-baseline="central" font-weight="700" font-size="7" fill="#5B6B85">
+        <text x="-16.5" y="0" fill="#C60C30" font-weight="800">N</text>
+        <text x="16.5" y="0">S</text>
+        <text x="0" y="-15.5">E</text>
+        <text x="0" y="15.5">W</text>
+      </g>
+    </svg>
+  </div>
+  <footer>
+    <div class="legend">
+      <span class="lt" id="legendTitle">Ticket Revenue</span>
+      <div class="ramp-wrap">
+        <div class="ramp" id="ramp"></div>
+        <div class="ramp-l"><span id="lmin">–</span><span id="lmid"></span><span id="lmax">–</span></div>
+      </div>
+      <span class="nd"><i></i>No data</span>
+    </div>
+    <div class="tiers" id="tiers"></div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =====================================================================
+   * 1. Sigma client + environment detection
+   * ===================================================================== */
+  var sdk = window.SigmaPlugin || (window.sigmaComputing && window.sigmaComputing.plugin) || null;
+  var client = sdk && sdk.client ? sdk.client : null;
+  var inIframe = (function () { try { return window.self !== window.top; } catch (e) { return true; } })();
+  var useSigma = !!(client && inIframe);
+
+  var EDITOR_PANEL = [
+    { name: 'source', type: 'element', label: 'Data source' },
+    { name: 'section', type: 'column', source: 'source', allowMultiple: false, allowedTypes: ['text', 'number', 'integer'], label: 'Section ID' },
+    { name: 'level', type: 'column', source: 'source', allowMultiple: false, allowedTypes: ['text'], label: 'Level (optional)' },
+    { name: 'metric', type: 'column', source: 'source', allowMultiple: false, allowedTypes: ['number', 'integer'], label: 'Metric (drives colour)' },
+    { name: 'tooltipColumns', type: 'column', source: 'source', allowMultiple: true, label: 'Tooltip fields (optional)' },
+    { name: 'metricLabel', type: 'text', label: 'Metric label', defaultValue: 'Ticket Revenue' },
+    { name: 'metricFormat', type: 'dropdown', label: 'Metric format', values: ['currency', 'percent', 'number'] },
+    { name: 'aggregation', type: 'dropdown', label: 'Combine duplicate section rows', values: ['Sum', 'Average'] },
+    { name: 'colorScheme', type: 'dropdown', label: 'Colour scheme', values: ['Bills Blue', 'Red-Blue diverging'] },
+    { name: 'selectedSection', type: 'variable', label: 'Selected section (control)' }
+  ];
+
+  if (useSigma) {
+    try { client.config.configureEditorPanel(EDITOR_PANEL); } catch (e) { console.warn('configureEditorPanel failed', e); useSigma = false; }
+  }
+
+  /* =====================================================================
+   * 2. Stadium geometry (procedural rounded-rectangle bowl)
+   *    Base rounded rect sits just outside the field; every tier is an
+   *    offset of it, so section boundaries run along shared normals.
+   * ===================================================================== */
+  var A = 200, B = 100, R = 44;           // base half-width, half-height, corner radius
+  var VB = { x: -402, y: -302, w: 804, h: 604 };
+  var TIERS = [
+    { key: 'L', name: 'Lower Bowl', start: 101, count: 40, d0: 8,   d1: 66,  maxFont: 15 },
+    { key: 'C', name: 'Club',       start: 201, count: 28, d0: 72,  d1: 108, maxFont: 16 },
+    { key: 'U', name: 'Upper Bowl', start: 301, count: 40, d0: 128, d1: 194, maxFont: 17 }
+  ];
+  var SUITES = { d0: 113, d1: 123 };
+  var DEG = Math.PI / 180;
+
+  // Perimeter segments, starting at bottom-centre (= west 50-yard line) and running clockwise on screen.
+  var SEGS = [
+    { t: 'L', p0: [0, B],          p1: [-(A - R), B],   n: [0, 1] },
+    { t: 'A', c: [-(A - R), B - R],  a0: 90,  a1: 180 },
+    { t: 'L', p0: [-A, B - R],      p1: [-A, -(B - R)],  n: [-1, 0] },
+    { t: 'A', c: [-(A - R), -(B - R)], a0: 180, a1: 270 },
+    { t: 'L', p0: [-(A - R), -B],   p1: [A - R, -B],     n: [0, -1] },
+    { t: 'A', c: [A - R, -(B - R)],  a0: 270, a1: 360 },
+    { t: 'L', p0: [A, -(B - R)],    p1: [A, B - R],      n: [1, 0] },
+    { t: 'A', c: [A - R, B - R],    a0: 0,   a1: 90 },
+    { t: 'L', p0: [A - R, B],       p1: [0, B],          n: [0, 1] }
+  ];
+  function segLen(s, dm) {
+    if (s.t === 'L') return Math.hypot(s.p1[0] - s.p0[0], s.p1[1] - s.p0[1]);
+    return (s.a1 - s.a0) * DEG * (R + dm);
+  }
+  function perimeter(dm) { var t = 0; SEGS.forEach(function (s) { t += segLen(s, dm); }); return t; }
+  // point at arc-length `s` (measured at offset dm), pushed out to offset d
+  function pointAt(s, dm, d) {
+    var P = perimeter(dm);
+    s = ((s % P) + P) % P;
+    for (var i = 0; i < SEGS.length; i++) {
+      var g = SEGS[i], L = segLen(g, dm);
+      if (s <= L || i === SEGS.length - 1) {
+        var f = L ? Math.min(1, s / L) : 0;
+        if (g.t === 'L') return [g.p0[0] + (g.p1[0] - g.p0[0]) * f + g.n[0] * d, g.p0[1] + (g.p1[1] - g.p0[1]) * f + g.n[1] * d];
+        var a = (g.a0 + (g.a1 - g.a0) * f) * DEG;
+        return [g.c[0] + (R + d) * Math.cos(a), g.c[1] + (R + d) * Math.sin(a)];
+      }
+      s -= L;
+    }
+  }
+  function rrPath(d) { // closed rounded rect at offset d
+    var r = R + d, x = A + d, y = B + d, ix = A - R, iy = B - R;
+    return 'M' + (-ix) + ',' + (-y) + 'H' + ix + 'A' + r + ',' + r + ' 0 0 1 ' + x + ',' + (-iy) +
+      'V' + iy + 'A' + r + ',' + r + ' 0 0 1 ' + ix + ',' + y + 'H' + (-ix) +
+      'A' + r + ',' + r + ' 0 0 1 ' + (-x) + ',' + iy + 'V' + (-iy) + 'A' + r + ',' + r + ' 0 0 1 ' + (-ix) + ',' + (-y) + 'Z';
+  }
+  function f1(v) { return Math.round(v * 10) / 10; }
+
+  var SECTIONS = [];   // {id, tier, tierIdx, d, cx, cy, pos}
+  TIERS.forEach(function (T, ti) {
+    var dm = (T.d0 + T.d1) / 2, P = perimeter(dm), w = P / T.count;
+    for (var i = 0; i < T.count; i++) {
+      var s0 = (i - 0.5) * w, s1 = (i + 0.5) * w;  // section N01 straddles the west 50
+      var n = Math.max(3, Math.ceil((s1 - s0) / 3)), outer = [], inner = [];
+      for (var k = 0; k <= n; k++) {
+        var s = s0 + (s1 - s0) * k / n;
+        outer.push(pointAt(s, dm, T.d1));
+        inner.push(pointAt(s, dm, T.d0));
+      }
+      var pts = outer.concat(inner.reverse());
+      var d = 'M' + pts.map(function (p) { return f1(p[0]) + ',' + f1(p[1]); }).join('L') + 'Z';
+      var c = pointAt(i * w, dm, dm);
+      SECTIONS.push({ id: String(T.start + i), tier: T, tierIdx: ti, d: d, cx: c[0], cy: c[1], pos: i / T.count });
+    }
+  });
+  var SEC_BY_ID = {}; SECTIONS.forEach(function (s) { SEC_BY_ID[s.id] = s; });
+
+  /* =====================================================================
+   * 3. Static drawing: bowl shell, field, suites, labels
+   * ===================================================================== */
+  var svg = d3.select('#map').attr('viewBox', [VB.x, VB.y, VB.w, VB.h].join(' ')).attr('preserveAspectRatio', 'xMidYMid meet');
+  var defs = svg.append('defs');
+  var shadow = defs.append('filter').attr('id', 'bowlShadow').attr('x', '-10%').attr('y', '-10%').attr('width', '120%').attr('height', '125%');
+  shadow.append('feDropShadow').attr('dx', 0).attr('dy', 4).attr('stdDeviation', 7).attr('flood-color', '#0C2340').attr('flood-opacity', 0.14);
+  var stripes = defs.append('pattern').attr('id', 'suitePat').attr('width', 6).attr('height', 6).attr('patternUnits', 'userSpaceOnUse').attr('patternTransform', 'rotate(45)');
+  stripes.append('rect').attr('width', 6).attr('height', 6).attr('fill', '#0C2340');
+  stripes.append('rect').attr('width', 2).attr('height', 6).attr('fill', '#1B3A63');
+
+  var vp = svg.append('g').attr('class', 'viewport');
+  var gStatic = vp.append('g').attr('class', 'static');
+
+  // stadium shell + concourse
+  gStatic.append('path').attr('d', rrPath(200)).attr('fill', '#fff').attr('filter', 'url(#bowlShadow)');
+  gStatic.append('path').attr('d', rrPath(200)).attr('fill', 'none').attr('stroke', '#0C2340').attr('stroke-width', 3);
+  gStatic.append('path').attr('d', rrPath(196)).attr('fill', '#EEF2F7');
+  // apron
+  gStatic.append('path').attr('d', rrPath(2)).attr('fill', '#2A6A33');
+
+  // suites band
+  gStatic.append('path').attr('d', rrPath(SUITES.d1) + rrPath(SUITES.d0)).attr('fill-rule', 'evenodd').attr('fill', 'url(#suitePat)');
+  [[0, B + 118, 0], [0, -(B + 118), 0], [-(A + 118), 0, -90], [A + 118, 0, 90]].forEach(function (p) {
+    gStatic.append('text').attr('transform', 'translate(' + p[0] + ',' + p[1] + ') rotate(' + p[2] + ')')
+      .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+      .attr('font-size', 6.5).attr('font-weight', 800).attr('letter-spacing', '.32em').attr('fill', '#fff').text('SUITES');
+  });
+
+  // field: 3 units per yard -> 360 x 160
+  var F = gStatic.append('g').attr('class', 'field');
+  for (var yd = 0; yd < 100; yd += 10) {
+    F.append('rect').attr('x', -150 + yd * 3).attr('y', -80).attr('width', 30).attr('height', 160)
+      .attr('fill', (yd / 10) % 2 ? '#3F8E44' : '#47994C');
+  }
+  [-1, 1].forEach(function (side) {
+    var x = side < 0 ? -180 : 150;
+    F.append('rect').attr('x', x).attr('y', -80).attr('width', 30).attr('height', 160).attr('fill', '#00338D');
+    F.append('text').attr('transform', 'translate(' + (side * 165) + ',0) rotate(' + (side * 90) + ')')
+      .attr('text-anchor', 'middle').attr('dominant-baseline', 'central').attr('fill', '#fff')
+      .attr('font-size', 19).attr('font-weight', 900).attr('letter-spacing', '.2em').text('BILLS');
+    // red pylon-style stripe inside end zone
+    F.append('rect').attr('x', side < 0 ? -178 : 176).attr('y', -78).attr('width', 2).attr('height', 156).attr('fill', '#C60C30');
+  });
+  for (var l = 0; l <= 100; l += 10) {
+    var lx = -150 + l * 3;
+    F.append('line').attr('x1', lx).attr('x2', lx).attr('y1', -80).attr('y2', 80)
+      .attr('stroke', '#fff').attr('stroke-width', l === 0 || l === 100 ? 1.6 : 0.9).attr('stroke-opacity', 0.92);
+    if (l > 0 && l < 100) {
+      var num = String(l <= 50 ? l : 100 - l);
+      F.append('text').attr('x', lx).attr('y', 62).attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+        .attr('fill', '#fff').attr('fill-opacity', 0.85).attr('font-size', 9).attr('font-weight', 700).text(num);
+      F.append('text').attr('transform', 'translate(' + lx + ',-62) rotate(180)').attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+        .attr('fill', '#fff').attr('fill-opacity', 0.85).attr('font-size', 9).attr('font-weight', 700).text(num);
+    }
+  }
+  // hash marks
+  for (var h = 1; h < 100; h++) {
+    if (h % 10 === 0) continue;
+    var hx = -150 + h * 3;
+    [-79, -22, 20, 77].forEach(function (hy) {
+      F.append('line').attr('x1', hx).attr('x2', hx).attr('y1', hy).attr('y2', hy + 2).attr('stroke', '#fff').attr('stroke-opacity', 0.55).attr('stroke-width', 0.6);
+    });
+  }
+  F.append('rect').attr('x', -180).attr('y', -80).attr('width', 360).attr('height', 160).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1.8);
+  // midfield emblem (schematic, not an official logo)
+  F.append('circle').attr('r', 24).attr('fill', '#00338D').attr('stroke', '#fff').attr('stroke-width', 2);
+  F.append('circle').attr('r', 19).attr('fill', 'none').attr('stroke', '#C60C30').attr('stroke-width', 2.2);
+  F.append('text').attr('text-anchor', 'middle').attr('dominant-baseline', 'central').attr('y', 0.5)
+    .attr('fill', '#fff').attr('font-size', 12).attr('font-weight', 900).attr('letter-spacing', '.06em').text('BUF');
+
+  // sideline / end labels in the apron
+  [
+    [0, B - 9, 0, 'WEST · HOME SIDELINE'],
+    [0, -(B - 9), 0, 'EAST · VISITOR SIDELINE'],
+    [-(A - 9), 0, -90, 'NORTH END'],
+    [A - 9, 0, 90, 'SOUTH END']
+  ].forEach(function (p) {
+    gStatic.append('text').attr('transform', 'translate(' + p[0] + ',' + p[1] + ') rotate(' + p[2] + ')')
+      .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+      .attr('font-size', 7.5).attr('font-weight', 800).attr('letter-spacing', '.18em').attr('fill', '#fff').attr('fill-opacity', 0.92).text(p[3]);
+  });
+
+  // sections
+  var gSecs = vp.append('g').attr('class', 'sections');
+  var secSel = gSecs.selectAll('g.sec').data(SECTIONS, function (d) { return d.id; }).join('g')
+    .attr('class', 'sec').attr('data-id', function (d) { return d.id; });
+  secSel.append('path').attr('d', function (d) { return d.d; }).attr('fill', '#E4E8EF');
+  secSel.append('text').attr('x', function (d) { return f1(d.cx); }).attr('y', function (d) { return f1(d.cy); })
+    .attr('fill', '#0C2340').text(function (d) { return d.id; });
+  // overlay layers (never reorder section nodes: moving the hovered node breaks click dispatch)
+  var gOver = vp.append('g').attr('class', 'overlay');
+  var ovSel = gOver.append('g').attr('class', 'ov ov-sel'); ovSel.append('path');
+  var ovHov = gOver.append('g').attr('class', 'ov ov-hov'); ovHov.append('path'); ovHov.append('text');
+
+  /* =====================================================================
+   * 4. Formatting + colour
+   * ===================================================================== */
+  var state = {
+    mode: 'sample', values: {}, extras: {}, levels: {}, extraNames: [],
+    metricLabel: 'Ticket Revenue', format: 'currency', scheme: 'Bills Blue',
+    selected: '', fracPct: true, cfg: {}, columns: {}, data: null,
+    scale: null, first: true
+  };
+
+  function siCompact(v) { return d3.format('.3~s')(v).replace('k', 'K').replace('G', 'B'); }
+  function fmtMetric(v, compact) {
+    if (v == null || isNaN(v)) return '—';
+    if (state.format === 'percent') {
+      var p = state.fracPct ? v : v / 100;
+      return d3.format(compact ? '.0%' : '.1%')(p);
+    }
+    if (state.format === 'currency') {
+      if (compact || Math.abs(v) >= 1e6) return (v < 0 ? '-$' : '$') + siCompact(Math.abs(v));
+      return d3.format(Math.abs(v) < 100 ? '$,.2f' : '$,.0f')(v);
+    }
+    if (compact && Math.abs(v) >= 1e4) return siCompact(v);
+    return d3.format(',.4~f')(v);
+  }
+  function fmtExtra(v, colInfo) {
+    if (v == null || v === '') return '—';
+    if (typeof v === 'number') {
+      var f = colInfo && colInfo.format;
+      if (f && f.format) { try { return d3.format(f.format)(v); } catch (e) { /* fall through */ } }
+      if (f && f.type === 'percent') return d3.format('.1%')(v);
+      if (f && f.type === 'currency') return d3.format('$,.0f')(v);
+      return d3.format(',.4~f')(v);
+    }
+    return String(v);
+  }
+
+  var BLUE_STOPS = ['#EEF3FB', '#B9CBEA', '#5E85C6', '#00338D'];
+  function buildScale(vals) {
+    var ext = d3.extent(vals);
+    if (ext[0] == null) return null;
+    if (ext[0] === ext[1]) ext = [ext[0] - 1, ext[1] + 1];
+    if (state.scheme === 'Red-Blue diverging') {
+      var mid = d3.median(vals);
+      if (!(mid > ext[0] && mid < ext[1])) mid = (ext[0] + ext[1]) / 2;
+      var s = d3.scaleDiverging().domain([ext[0], mid, ext[1]])
+        .interpolator(d3.piecewise(d3.interpolateLab, ['#C60C30', '#F08A9A', '#F4F5F8', '#7C9AD0', '#00338D']));
+      s.kind = 'div'; s.mid = mid; s.ext = ext; return s;
+    }
+    var q = d3.scaleSequential().domain(ext).interpolator(d3.piecewise(d3.interpolateLab, BLUE_STOPS));
+    q.kind = 'seq'; q.ext = ext; return q;
+  }
+  function textColor(fill) { var c = d3.lab(fill); return c.l < 58 ? '#FFFFFF' : '#0C2340'; }
+  var NODATA = '#D5DAE2';
+
+  /* =====================================================================
+   * 5. Render (data-driven updates)
+   * ===================================================================== */
+  function levelOf(id) { return state.levels[id] || (SEC_BY_ID[id] ? SEC_BY_ID[id].tier.name : ''); }
+
+  function render() {
+    var ids = Object.keys(state.values).filter(function (k) { return SEC_BY_ID[k] && isFinite(state.values[k]); });
+    var vals = ids.map(function (k) { return state.values[k]; });
+    state.fracPct = vals.length ? d3.max(vals, Math.abs) <= 1.5 : true;
+    var scale = state.scale = buildScale(vals);
+
+    // ranks
+    state.rank = {};
+    ids.slice().sort(function (a, b) { return state.values[b] - state.values[a]; }).forEach(function (id, i) { state.rank[id] = i + 1; });
+    state.ranked = ids.length;
+
+    function fillOf(d) { var v = state.values[d.id]; return scale && v != null && isFinite(v) ? scale(v) : NODATA; }
+    var first = state.first; state.first = false;
+    secSel.select('path').transition().duration(first ? 700 : 650).ease(d3.easeCubicInOut)
+      .delay(function (d, i) { return first ? d.tierIdx * 120 + d.pos * 380 : 0; })
+      .attr('fill', fillOf);
+    secSel.select('text').transition().duration(first ? 700 : 650)
+      .delay(function (d) { return first ? d.tierIdx * 120 + d.pos * 380 : 0; })
+      .attr('fill', function (d) { return textColor(fillOf(d)); });
+
+    // header + legend
+    var label = state.metricLabel || 'Metric';
+    d3.select('#title').html('').text(label).append('span').text(' by section');
+    d3.select('#legendTitle').text(label);
+    d3.select('#badge').style('display', state.mode === 'sample' ? null : 'none')
+      .attr('title', state.mode === 'sample' ? (useSigma ? 'Pick a data source, Section ID and Metric in the editor panel to use live data.' : 'Opened outside Sigma — showing built-in sample data.') : null);
+    if (scale) {
+      var stops = d3.range(0, 1.0001, 0.1).map(function (t) {
+        var v = scale.ext[0] + t * (scale.ext[1] - scale.ext[0]);
+        if (scale.kind === 'div') v = t < 0.5 ? scale.ext[0] + (t / 0.5) * (scale.mid - scale.ext[0]) : scale.mid + ((t - 0.5) / 0.5) * (scale.ext[1] - scale.mid);
+        return scale(v) + ' ' + Math.round(t * 100) + '%';
+      });
+      d3.select('#ramp').style('background', 'linear-gradient(90deg,' + stops.join(',') + ')');
+      d3.select('#lmin').text(fmtMetric(scale.ext[0], true));
+      d3.select('#lmax').text(fmtMetric(scale.ext[1], true));
+      d3.select('#lmid').text(scale.kind === 'div' ? 'median ' + fmtMetric(scale.mid, true) : '');
+    } else {
+      d3.select('#ramp').style('background', NODATA);
+      d3.select('#lmin').text('—'); d3.select('#lmax').text('—'); d3.select('#lmid').text('');
+    }
+
+    // tier summary (average metric per tier)
+    var tierData = TIERS.map(function (T) {
+      var tv = ids.filter(function (id) { return SEC_BY_ID[id].tier === T; }).map(function (id) { return state.values[id]; });
+      return { T: T, avg: tv.length ? d3.mean(tv) : null, n: tv.length };
+    });
+    var tiles = d3.select('#tiers').selectAll('div.tier').data(tierData, function (d) { return d.T.key; }).join(function (enter) {
+      var t = enter.append('div').attr('class', 'tier');
+      t.append('i');
+      var col = t.append('div');
+      col.append('div').attr('class', 'n');
+      var row = col.append('div');
+      row.append('span').attr('class', 'v');
+      row.append('span').attr('class', 's');
+      return t;
+    });
+    tiles.select('i').style('background', function (d) { return d.avg != null && scale ? scale(d.avg) : NODATA; });
+    tiles.select('.n').text(function (d) { return d.T.name; });
+    tiles.select('.v').text(function (d) { return d.avg != null ? fmtMetric(d.avg, true) : '—'; });
+    tiles.select('.s').text(function (d) { return d.avg != null ? ' avg · ' + d.n + ' sec' : ''; });
+    tiles.attr('title', function (d) { return d.T.name + ' (' + d.T.start + '–' + (d.T.start + d.T.count - 1) + '): average ' + label + ' ' + fmtMetric(d.avg) + ' across ' + d.n + ' sections'; });
+
+    applySelection();
+  }
+
+  /* =====================================================================
+   * 6. Selection (click -> control variable)
+   * ===================================================================== */
+  function normId(v) {
+    if (v == null) return '';
+    var s = String(v).trim();
+    var m = s.match(/\d{3}/);
+    if (m && SEC_BY_ID[m[0]]) return m[0];
+    var n = Number(s);
+    if (isFinite(n) && SEC_BY_ID[String(Math.round(n))]) return String(Math.round(n));
+    return s;
+  }
+  function applySelection() {
+    var sel = state.selected;
+    secSel.classed('selected', function (d) { return d.id === sel; });
+    svg.classed('has-sel', !!sel && !!SEC_BY_ID[sel]);
+    if (sel && SEC_BY_ID[sel]) ovSel.select('path').attr('d', SEC_BY_ID[sel].d);
+    ovSel.classed('on', !!sel && !!SEC_BY_ID[sel]);
+    d3.select('#chip').classed('on', !!sel);
+    d3.select('#chipText').text(sel ? 'Section ' + sel : '');
+  }
+  function setSelected(id) {
+    state.selected = id || '';
+    applySelection();
+    if (useSigma && state.cfg.selectedSection) {
+      try { client.config.setVariable(state.cfg.selectedSection, state.selected); }
+      catch (e) { console.warn('setVariable failed', e); }
+    }
+  }
+  function unwrapVariable(v) {
+    if (v == null) return '';
+    if (typeof v === 'object') {
+      var x = v.value !== undefined ? v.value : (v.defaultValue && v.defaultValue.value !== undefined ? v.defaultValue.value : '');
+      if (Array.isArray(x)) x = x.length ? x[0] : '';
+      return x == null ? '' : x;
+    }
+    return v;
+  }
+
+  /* =====================================================================
+   * 7. Interaction: hover tooltip, click, zoom
+   * ===================================================================== */
+  var tip = d3.select('#tip'), stageEl = document.getElementById('stage');
+  function tipHtml(d) {
+    var v = state.values[d.id], has = v != null && isFinite(v);
+    var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var h = '<div class="tip-h"><span class="tip-sec">Section ' + esc(d.id) + '</span><span class="tip-lvl">' + esc(levelOf(d.id)) + '</span></div><div class="tip-b">';
+    if (has) {
+      h += '<div class="tip-metric"><span class="k">' + esc(state.metricLabel || 'Metric') + '</span><span class="v">' + esc(fmtMetric(v)) + '</span></div>';
+      if (state.rank[d.id]) h += '<div class="tip-rank">#' + state.rank[d.id] + ' of ' + state.ranked + ' sections</div>';
+    } else {
+      h += '<div class="tip-nodata">No data for this section</div>';
+    }
+    var ex = state.extras[d.id];
+    if (ex && ex.length) {
+      h += '<div class="tip-rows">' + ex.map(function (e) { return '<span class="k">' + esc(e.k) + '</span><span class="v">' + esc(e.v) + '</span>'; }).join('') + '</div>';
+    }
+    h += '</div><div class="tip-f">' + (state.selected === d.id ? 'Click to clear selection' : 'Click to select this section') + '</div>';
+    return h;
+  }
+  function placeTip(ev) {
+    var r = stageEl.getBoundingClientRect(), node = tip.node();
+    var w = node.offsetWidth, h = node.offsetHeight;
+    var x = ev.clientX - r.left + 16, y = ev.clientY - r.top + 14;
+    if (x + w > r.width - 6) x = ev.clientX - r.left - w - 16;
+    if (y + h > r.height - 6) y = Math.max(6, r.height - h - 6);
+    tip.style('left', Math.max(6, x) + 'px').style('top', Math.max(6, y) + 'px');
+  }
+  secSel
+    .on('mouseenter', function (ev, d) {
+      d3.select(this).classed('hover', true);
+      var p = d3.select(this).select('path'), t = d3.select(this).select('text');
+      ovHov.select('path').attr('d', d.d).attr('fill', p.attr('fill'));
+      ovHov.select('text').attr('x', t.attr('x')).attr('y', t.attr('y')).attr('font-size', t.attr('font-size')).attr('fill', t.attr('fill')).text(d.id);
+      ovHov.classed('on', true);
+      tip.html(tipHtml(d)).classed('on', true); placeTip(ev);
+    })
+    .on('mousemove', function (ev) { placeTip(ev); })
+    .on('mouseleave', function () {
+      d3.select(this).classed('hover', false);
+      ovHov.classed('on', false);
+      tip.classed('on', false);
+      if (state.selected) applySelection();
+    })
+    .on('click', function (ev, d) {
+      setSelected(state.selected === d.id ? '' : d.id);
+      tip.html(tipHtml(d));
+    });
+
+  d3.select('#chipClear').on('click', function () { setSelected(''); });
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && state.selected) setSelected(''); });
+
+  var zoomK = 1;
+  var zoom = d3.zoom().scaleExtent([1, 8]).clickDistance(5)
+    .translateExtent([[VB.x - 40, VB.y - 40], [VB.x + VB.w + 40, VB.y + VB.h + 40]])
+    .on('zoom', function (ev) { vp.attr('transform', ev.transform); zoomK = ev.transform.k; updateLabelSize(); tip.classed('on', false); });
+  svg.call(zoom).on('dblclick.zoom', null);
+  d3.select('#reset').on('click', function () { svg.transition().duration(550).ease(d3.easeCubicOut).call(zoom.transform, d3.zoomIdentity); });
+
+  /* =====================================================================
+   * 8. Responsive: label sizing + compact chrome
+   * ===================================================================== */
+  function updateLabelSize() {
+    if (!svg.node().isConnected) return;
+    var r = svg.node().getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    var k = Math.min(r.width / VB.w, r.height / VB.h) * zoomK;     // px per SVG unit
+    secSel.select('text').attr('font-size', function (d) {
+      var target = 10.5 / k;                                      // aim for ~10.5px on screen
+      return f1(Math.max(7.5, Math.min(d.tier.maxFont, target)));
+    });
+  }
+  function onResize() {
+    var app = document.getElementById('app'); if (!app) return;
+    var w = app.clientWidth, h = app.clientHeight;
+    app.classList.toggle('narrow', w < 820);
+    app.classList.toggle('tiny', w < 560);
+    app.classList.toggle('short', h < 460);
+    updateLabelSize();
+  }
+  if (window.ResizeObserver) new ResizeObserver(onResize).observe(document.getElementById('app'));
+  window.addEventListener('resize', onResize);
+  onResize();
+
+  /* =====================================================================
+   * 9. Sample data (standalone preview / unconfigured plugin)
+   * ===================================================================== */
+  function sampleData() {
+    var rnd = d3.randomLcg(0.4217), noise = function (a) { return 1 - a + rnd() * 2 * a; };
+    var cfgs = {
+      L: { base: 252000, a: 0.45, b: 0.55, p: 1.2, e: 0.16, cap: 760, st: 0.93 },
+      C: { base: 214000, a: 0.55, b: 0.45, p: 1.0, e: 0.10, cap: 380, st: 0.90 },
+      U: { base: 104000, a: 0.30, b: 0.70, p: 2.0, e: 0.25, cap: 840, st: 0.80 }
+    };
+    var values = {}, extras = {}, levels = {};
+    SECTIONS.forEach(function (S) {
+      var c = cfgs[S.tier.key], phi = S.pos * 2 * Math.PI;
+      var side = Math.pow(Math.cos(phi), 2);           // 1 on the sidelines, 0 at the end zones
+      var endz = Math.pow(Math.sin(phi), 12);          // spikes at end-zone centres
+      var rev = c.base * (c.a + c.b * Math.pow(side, c.p) + c.e * endz) * noise(0.06);
+      var cap = Math.round(c.cap * noise(0.08) / 10) * 10;
+      var st = Math.min(1, c.st + 0.07 * side + (rnd() - 0.5) * 0.06);
+      var sold = Math.round(cap * st);
+      values[S.id] = Math.round(rev / 50) * 50;
+      levels[S.id] = S.tier.name;
+      extras[S.id] = [
+        { k: 'Seats Sold', v: d3.format(',')(sold) },
+        { k: 'Capacity', v: d3.format(',')(cap) },
+        { k: 'Sell-Through', v: d3.format('.1%')(sold / cap) },
+        { k: 'Avg Ticket Price', v: d3.format('$,.0f')(values[S.id] / sold) }
+      ];
+    });
+    return { values: values, extras: extras, levels: levels };
+  }
+  function useSample() {
+    var s = sampleData();
+    state.mode = 'sample';
+    state.values = s.values; state.extras = s.extras; state.levels = s.levels;
+  }
+
+  /* =====================================================================
+   * 10. Sigma wiring
+   * ===================================================================== */
+  function asArray(v) { return Array.isArray(v) ? v : (v ? [v] : []); }
+  function applyCfgDisplay(cfg) {
+    state.metricLabel = (cfg.metricLabel && String(cfg.metricLabel).trim()) || (cfg.metric && state.columns[cfg.metric] && state.columns[cfg.metric].name) || 'Ticket Revenue';
+    state.format = ['currency', 'percent', 'number'].indexOf(cfg.metricFormat) >= 0 ? cfg.metricFormat : 'currency';
+    state.scheme = cfg.colorScheme === 'Red-Blue diverging' ? 'Red-Blue diverging' : 'Bills Blue';
+  }
+  function rebuildFromSigma() {
+    var cfg = state.cfg || {}, data = state.data;
+    applyCfgDisplay(cfg);
+    var secCol = data && cfg.section && data[cfg.section];
+    var metCol = data && cfg.metric && data[cfg.metric];
+    if (!secCol || !metCol || !secCol.length) { useSample(); render(); return; }
+
+    var lvlCol = cfg.level ? data[cfg.level] : null;
+    var tipCols = asArray(cfg.tooltipColumns).filter(function (c) { return data[c] && c !== cfg.metric && c !== cfg.section; });
+    var avg = cfg.aggregation === 'Average';
+    var acc = {};
+    for (var i = 0; i < secCol.length; i++) {
+      var id = normId(secCol[i]); if (!id) continue;
+      var raw = metCol[i], v = raw == null || raw === '' ? NaN : Number(raw);
+      var a = acc[id] || (acc[id] = { sum: 0, n: 0, level: null, extras: {} });
+      if (isFinite(v)) { a.sum += v; a.n++; }
+      if (lvlCol && lvlCol[i] != null && !a.level) a.level = String(lvlCol[i]);
+      tipCols.forEach(function (c) {
+        var x = data[c][i];
+        if (typeof x === 'number') { var e = a.extras[c] || (a.extras[c] = { num: true, sum: 0, n: 0 }); if (e.num) { e.sum += x; e.n++; } }
+        else if (x != null && !a.extras[c]) a.extras[c] = { num: false, val: x };
+      });
+    }
+    var values = {}, extras = {}, levels = {};
+    Object.keys(acc).forEach(function (id) {
+      var a = acc[id];
+      if (a.n) values[id] = avg ? a.sum / a.n : a.sum;
+      if (a.level) levels[id] = a.level;
+      extras[id] = tipCols.map(function (c) {
+        var info = state.columns[c] || {}, e = a.extras[c];
+        var val = !e ? null : (e.num ? (avg ? e.sum / e.n : (e.n > 1 ? e.sum : e.sum)) : e.val);
+        return { k: info.name || c, v: fmtExtra(val, info) };
+      });
+    });
+    state.mode = 'live';
+    state.values = values; state.extras = extras; state.levels = levels;
+    render();
+  }
+
+  if (useSigma) {
+    var unsubData = null, unsubCols = null, unsubVar = null, curSource = null, curVar = null;
+    useSample(); render();
+    client.config.subscribe(function (cfg) {
+      state.cfg = cfg || {};
+      if (state.cfg.source !== curSource) {
+        curSource = state.cfg.source;
+        if (unsubData) { unsubData(); unsubData = null; }
+        if (unsubCols) { unsubCols(); unsubCols = null; }
+        state.data = null; state.columns = {};
+        if (curSource) {
+          unsubCols = client.elements.subscribeToElementColumns(curSource, function (cols) { state.columns = cols || {}; rebuildFromSigma(); });
+          unsubData = client.elements.subscribeToElementData(curSource, function (d) { state.data = d; rebuildFromSigma(); });
+        }
+      }
+      if (state.cfg.selectedSection !== curVar) {
+        curVar = state.cfg.selectedSection;
+        if (unsubVar) { unsubVar(); unsubVar = null; }
+        if (curVar) {
+          try {
+            var init = client.config.getVariable(curVar);
+            if (init !== undefined) { state.selected = normId(unwrapVariable(init)); }
+            unsubVar = client.config.subscribeToWorkbookVariable(curVar, function (v) {
+              var nv = normId(unwrapVariable(v));
+              if (nv !== state.selected) { state.selected = nv; applySelection(); }
+            });
+          } catch (e) { console.warn('variable subscribe failed', e); }
+        }
+      }
+      rebuildFromSigma();
+    });
+  } else {
+    // standalone preview: open with #diverging to preview the second palette
+    if (/div/i.test(location.hash)) state.scheme = 'Red-Blue diverging';
+    useSample();
+    render();
+  }
+})();
+</script>
+</body>
+</html>
