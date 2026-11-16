@@ -665,7 +665,7 @@
         if (!data) miss.push('waiting for rows');
         else miss.push('columns not in data (' + Object.keys(data).length + ' cols)');
       }
-      state.waitReason = 'needs ' + miss.join(', ');
+      state.waitReason = (miss[0].indexOf('waiting') === 0 || miss[0].indexOf('columns') === 0 ? '' : 'needs ') + miss.join(', ');
       useSample(); render(); return;
     }
 
