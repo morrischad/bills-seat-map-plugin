@@ -435,6 +435,7 @@
     d3.select('#title').html('').text(label).append('span').text(' by section');
     d3.select('#legendTitle').text(label);
     d3.select('#badge').style('display', state.mode === 'sample' ? null : 'none')
+      .text(state.mode === 'sample' && useSigma && state.waitReason ? 'Sample data · ' + state.waitReason : 'Sample data')
       .attr('title', state.mode === 'sample' ? (useSigma ? 'Pick a data source, Section ID and Metric in the editor panel to use live data.' : 'Opened outside Sigma — showing built-in sample data.') : null);
     if (scale) {
       var stops = d3.range(0, 1.0001, 0.1).map(function (t) {
@@ -654,7 +655,19 @@
     applyCfgDisplay(cfg);
     var secCol = data && cfg.section && data[cfg.section];
     var metCol = data && cfg.metric && data[cfg.metric];
-    if (!secCol || !metCol || !secCol.length) { useSample(); render(); return; }
+    if (!secCol || !metCol || !secCol.length) {
+      // Say exactly what is missing, so a misconfigured plugin is easy to diagnose.
+      var miss = [];
+      if (!cfg.source) miss.push('source');
+      if (!cfg.section) miss.push('section');
+      if (!cfg.metric) miss.push('metric');
+      if (!miss.length) {
+        if (!data) miss.push('waiting for rows');
+        else miss.push('columns not in data (' + Object.keys(data).length + ' cols)');
+      }
+      state.waitReason = 'needs ' + miss.join(', ');
+      useSample(); render(); return;
+    }
 
     var lvlCol = cfg.level ? data[cfg.level] : null;
     var tipCols = asArray(cfg.tooltipColumns).filter(function (c) { return data[c] && c !== cfg.metric && c !== cfg.section; });
