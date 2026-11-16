@@ -127,7 +127,7 @@
   <div id="stage">
     <svg id="map" role="img" aria-label="Stadium seat map"></svg>
     <div id="tip"></div>
-    <div class="hint">Scroll to zoom &middot; drag to pan &middot; click a section to filter</div>
+    <div class="hint">Scroll to zoom &middot; drag to pan &middot; click a section to highlight &middot; use the Section filter to drill in</div>
     <svg class="compass" viewBox="-24 -24 48 48" aria-hidden="true">
       <circle r="22" fill="#fff" stroke="#E3E8F0"/>
       <path d="M-11 0 L0 -3.6 L0 3.6 Z" fill="#C60C30"/>
@@ -497,17 +497,18 @@
     d3.select('#chip').classed('on', !!sel);
     d3.select('#chipText').text(sel ? 'Section ' + sel : '');
   }
-  // Variable calls take the bound control id (the selectedSection config VALUE); verified
-  // in Sigma 2026-11: passing the key "selectedSection" fails with "not found".
+  // Write-back to the workbook control is OFF by default: on papercranestaging (2026-11-16)
+  // Sigma's host rejected wb:plugin:variable:set with "Control variable name: … not found"
+  // for every form of the id, showing an error toast. The map still READS the bound control
+  // (so the Section dropdown highlights the map); set WRITE_BACK = true to retry writing.
+  var WRITE_BACK = false;
   function setSelected(id) {
     state.selected = id || '';
     applySelection();
-    if (useSigma && state.cfg.selectedSection) {
-      // A list control receiving '' would filter to an empty string (hiding every row),
-      // so clearing calls setVariable with no values, which resets the control.
+    if (WRITE_BACK && useSigma && state.cfg.selectedSection) {
       try {
-        if (state.selected) client.config.setVariable(state.cfg.selectedSection, state.selected);
-        else client.config.setVariable(state.cfg.selectedSection);
+        if (state.selected) client.config.setVariable('selectedSection', state.selected);
+        else client.config.setVariable('selectedSection');
       }
       catch (e) { console.warn('setVariable failed', e); }
     }
@@ -540,7 +541,7 @@
     if (ex && ex.length) {
       h += '<div class="tip-rows">' + ex.map(function (e) { return '<span class="k">' + esc(e.k) + '</span><span class="v">' + esc(e.v) + '</span>'; }).join('') + '</div>';
     }
-    h += '</div><div class="tip-f">' + (state.selected === d.id ? 'Click to clear selection' : 'Click to select this section') + '</div>';
+    h += '</div><div class="tip-f">' + (state.selected === d.id ? 'Click to clear highlight' : 'Click to highlight this section') + '</div>';
     return h;
   }
   function placeTip(ev) {
@@ -734,9 +735,9 @@
         if (unsubVar) { unsubVar(); unsubVar = null; }
         if (curVar) {
           try {
-            var init = client.config.getVariable(curVar);
+            var init = client.config.getVariable("selectedSection");
             if (init !== undefined) { state.selected = normId(unwrapVariable(init)); }
-            unsubVar = client.config.subscribeToWorkbookVariable(curVar, function (v) {
+            unsubVar = client.config.subscribeToWorkbookVariable("selectedSection", function (v) {
               var nv = normId(unwrapVariable(v));
               if (nv !== state.selected) { state.selected = nv; applySelection(); }
             });
