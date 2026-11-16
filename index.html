@@ -704,18 +704,29 @@
   }
 
   if (useSigma) {
-    var unsubData = null, unsubCols = null, unsubVar = null, curSource = null, curVar = null;
+    var unsubData = [], unsubCols = [], unsubVar = null, curSource = null, curVar = null;
     useSample(); render();
     client.config.subscribe(function (cfg) {
       state.cfg = cfg || {};
-      if (state.cfg.source !== curSource) {
-        curSource = state.cfg.source;
-        if (unsubData) { unsubData(); unsubData = null; }
-        if (unsubCols) { unsubCols(); unsubCols = null; }
+      // The source value may arrive as an id string or as an object; compare by value so a
+      // fresh-but-equal object on every config push doesn't tear down the data subscription.
+      var src = state.cfg.source;
+      var srcId = src && typeof src === 'object' ? (src.elementId || src.id || '') : (src || '');
+      var srcKey = JSON.stringify(src || null);
+      if (srcKey !== curSource) {
+        curSource = srcKey;
+        (unsubData || []).forEach(function (u) { try { u(); } catch (e) {} });
+        (unsubCols || []).forEach(function (u) { try { u(); } catch (e) {} });
+        unsubData = []; unsubCols = [];
         state.data = null; state.columns = {};
-        if (curSource) {
-          unsubCols = client.elements.subscribeToElementColumns("source", function (cols) { state.columns = cols || {}; rebuildFromSigma(); });
-          unsubData = client.elements.subscribeToElementData("source", function (d) { state.data = d; rebuildFromSigma(); });
+        if (src) {
+          // Subscribe by element id (documented) and by config key (React-hook style); whichever
+          // the host honours delivers rows, the other is a harmless no-op.
+          var ids = [srcId, 'source'].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+          ids.forEach(function (id) {
+            try { unsubCols.push(client.elements.subscribeToElementColumns(id, function (cols) { if (cols && Object.keys(cols).length) { state.columns = cols; rebuildFromSigma(); } })); } catch (e) { console.warn('columns subscribe failed for', id, e); }
+            try { unsubData.push(client.elements.subscribeToElementData(id, function (d) { if (d && Object.keys(d).length) { state.data = d; rebuildFromSigma(); } })); } catch (e) { console.warn('data subscribe failed for', id, e); }
+          });
         }
       }
       if (state.cfg.selectedSection !== curVar) {
