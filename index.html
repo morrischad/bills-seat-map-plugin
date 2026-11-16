@@ -127,7 +127,7 @@
   <div id="stage">
     <svg id="map" role="img" aria-label="Stadium seat map"></svg>
     <div id="tip"></div>
-    <div class="hint">Scroll to zoom &middot; drag to pan &middot; click a section to highlight &middot; use the Section filter to drill in</div>
+    <div class="hint">Scroll to zoom &middot; drag to pan &middot; click a section to highlight it</div>
     <svg class="compass" viewBox="-24 -24 48 48" aria-hidden="true">
       <circle r="22" fill="#fff" stroke="#E3E8F0"/>
       <path d="M-11 0 L0 -3.6 L0 3.6 Z" fill="#C60C30"/>
@@ -174,8 +174,7 @@
     { name: 'metricLabel', type: 'text', label: 'Metric label', defaultValue: 'Ticket Revenue' },
     { name: 'metricFormat', type: 'dropdown', label: 'Metric format', values: ['currency', 'percent', 'number'] },
     { name: 'aggregation', type: 'dropdown', label: 'Combine duplicate section rows', values: ['Sum', 'Average'] },
-    { name: 'colorScheme', type: 'dropdown', label: 'Colour scheme', values: ['Bills Blue', 'Red-Blue diverging'] },
-    { name: 'selectedSection', type: 'variable', label: 'Selected section (control)' }
+    { name: 'colorScheme', type: 'dropdown', label: 'Colour scheme', values: ['Bills Blue', 'Red-Blue diverging'] }
   ];
 
   if (useSigma) {
@@ -730,7 +729,7 @@
           });
         }
       }
-      if (state.cfg.selectedSection !== curVar) {
+      if (false && state.cfg.selectedSection !== curVar) {  // variable link removed (Sigma host rejects it)
         curVar = state.cfg.selectedSection;
         if (unsubVar) { unsubVar(); unsubVar = null; }
         if (curVar) {
