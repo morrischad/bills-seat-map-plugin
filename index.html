@@ -497,6 +497,8 @@
     d3.select('#chip').classed('on', !!sel);
     d3.select('#chipText').text(sel ? 'Section ' + sel : '');
   }
+  // Sigma plugin SDK calls take the editor-panel CONFIG KEY ("source", "selectedSection"),
+  // not the bound element id or control name the config value holds.
   function setSelected(id) {
     state.selected = id || '';
     applySelection();
@@ -504,8 +506,8 @@
       // A list control receiving '' would filter to an empty string (hiding every row),
       // so clearing calls setVariable with no values, which resets the control.
       try {
-        if (state.selected) client.config.setVariable(state.cfg.selectedSection, state.selected);
-        else client.config.setVariable(state.cfg.selectedSection);
+        if (state.selected) client.config.setVariable("selectedSection", state.selected);
+        else client.config.setVariable("selectedSection");
       }
       catch (e) { console.warn('setVariable failed', e); }
     }
@@ -712,8 +714,8 @@
         if (unsubCols) { unsubCols(); unsubCols = null; }
         state.data = null; state.columns = {};
         if (curSource) {
-          unsubCols = client.elements.subscribeToElementColumns(curSource, function (cols) { state.columns = cols || {}; rebuildFromSigma(); });
-          unsubData = client.elements.subscribeToElementData(curSource, function (d) { state.data = d; rebuildFromSigma(); });
+          unsubCols = client.elements.subscribeToElementColumns("source", function (cols) { state.columns = cols || {}; rebuildFromSigma(); });
+          unsubData = client.elements.subscribeToElementData("source", function (d) { state.data = d; rebuildFromSigma(); });
         }
       }
       if (state.cfg.selectedSection !== curVar) {
@@ -721,9 +723,9 @@
         if (unsubVar) { unsubVar(); unsubVar = null; }
         if (curVar) {
           try {
-            var init = client.config.getVariable(curVar);
+            var init = client.config.getVariable("selectedSection");
             if (init !== undefined) { state.selected = normId(unwrapVariable(init)); }
-            unsubVar = client.config.subscribeToWorkbookVariable(curVar, function (v) {
+            unsubVar = client.config.subscribeToWorkbookVariable("selectedSection", function (v) {
               var nv = normId(unwrapVariable(v));
               if (nv !== state.selected) { state.selected = nv; applySelection(); }
             });
