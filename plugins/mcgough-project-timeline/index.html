@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Delivery Timeline</title>
+<!-- McGough demo plugin: Gantt of active projects, % complete fill, today line, schedule risk.
+     Vanilla SVG, no animation loop (headless export must reach idle), synth() fallback when unbound. -->
+<script src="https://unpkg.com/@sigmacomputing/plugin@1.2.0/dist/umd/sigmacomputing-plugin.umd.js"></script>
+<style>
+  :root { --ink:#1F2024; --muted:#6B6F78; --line:#E4E5E8; --bg:#FFFFFF; --brand:#8A2432; }
+  html, body { margin:0; height:100%; background:var(--bg); font-family:"Inter","Helvetica Neue",Arial,sans-serif; color:var(--ink); }
+  #stage { position:absolute; inset:0; overflow:hidden; }
+  #tip { position:absolute; pointer-events:none; background:#1F2024; color:#fff; font-size:12px; line-height:1.45;
+         padding:8px 10px; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.18); display:none; max-width:280px; }
+  #badge { position:absolute; right:10px; bottom:6px; font-size:10px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="tip"></div>
+<div id="badge"></div>
+<script>
+(function () {
+  var SECTOR_COLORS = {
+    'Data Centers': '#8A2432', 'Advanced Technology': '#8A2432',
+    'Life Sciences & Semiconductor': '#B4485A', 'Industrial & Power': '#4A4E57',
+    'Healthcare': '#2E7D6B', 'Commercial & Institutional': '#7A8594', 'Facility Services': '#C9A227'
+  };
+  var FALLBACK = ['#8A2432', '#4A4E57', '#2E7D6B', '#B4485A', '#7A8594', '#C9A227', '#5E1822'];
+  var stage = document.getElementById('stage'), tip = document.getElementById('tip'), badge = document.getElementById('badge');
+  var state = { rows: synth(), mode: 'sample', cfg: {} };
+
+  function synth() {
+    var t = Date.UTC(2026, 10, 19), d = 864e5;
+    return [
+      ['AI Data Center Campus Ph. 2 — ND', 'Data Centers', -420, 260, .58, 1180, 'At risk'],
+      ['Hyperscale Data Hall C — MN', 'Data Centers', -300, 190, .64, 640, 'On track'],
+      ['Semiconductor Fab Support Bldg — TX', 'Life Sciences & Semiconductor', -380, 120, .78, 410, 'On track'],
+      ['Biologics Fill-Finish Expansion — MN', 'Life Sciences & Semiconductor', -200, 330, .36, 285, 'On track'],
+      ['Corn Wet-Milling Expansion — MN', 'Industrial & Power', -520, 40, .93, 230, 'Ahead'],
+      ['Central Utility Plant — IA', 'Industrial & Power', -150, 280, .31, 160, 'At risk'],
+      ['Regional Medical Center Tower — SD', 'Healthcare', -610, 90, .87, 520, 'On track'],
+      ['Behavioral Health Campus — ND', 'Healthcare', -120, 420, .22, 140, 'On track'],
+      ['University Science Center — MN', 'Commercial & Institutional', -450, 30, .95, 190, 'Ahead'],
+      ['Municipal Water Treatment — MT', 'Industrial & Power', -260, 250, .48, 175, 'Behind'],
+      ['Airport Concourse Renovation — NC', 'Commercial & Institutional', -90, 480, .14, 260, 'On track']
+    ].map(function (r) {
+      return { project: r[0], sector: r[1], start: t + r[2] * d, finish: t + r[3] * d, pct: r[4], value: r[5], status: r[6] };
+    });
+  }
+
+  function toTime(v) {
+    if (v == null || v === '') return NaN;
+    if (typeof v === 'number') return v;
+    var t = Date.parse(v); return isNaN(t) ? NaN : t;
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function money(v) { return v >= 1000 ? '$' + (v / 1000).toFixed(2) + 'B' : '$' + Math.round(v) + 'M'; }
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmtDate(t) { var d = new Date(t); return MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); }
+
+  function colorFor(sector, idx) { return SECTOR_COLORS[sector] || FALLBACK[idx % FALLBACK.length]; }
+
+  function render() {
+    var W = stage.clientWidth || 800, H = stage.clientHeight || 420;
+    var rows = state.rows.filter(function (r) { return !isNaN(r.start) && !isNaN(r.finish); })
+      .sort(function (a, b) { return a.finish - b.finish; });
+    if (!rows.length) { stage.innerHTML = '<div style="padding:16px;color:#6B6F78;font-size:13px">No projects to show.</div>'; return; }
+    var labelW = Math.min(300, Math.max(170, W * 0.32)), valW = 64, top = 34, bottom = 26, padR = 14;
+    var x0 = labelW + 10, x1 = W - valW - padR;
+    var rowH = Math.max(14, Math.min(34, (H - top - bottom) / rows.length));
+    var tMin = Math.min.apply(null, rows.map(function (r) { return r.start; }));
+    var tMax = Math.max.apply(null, rows.map(function (r) { return r.finish; }));
+    var span = tMax - tMin || 1; tMin -= span * 0.02; tMax += span * 0.02; span = tMax - tMin;
+    var X = function (t) { return x0 + (t - tMin) / span * (x1 - x0); };
+    var now = Date.now();
+    var sectors = [];
+    rows.forEach(function (r) { if (sectors.indexOf(r.sector) < 0) sectors.push(r.sector); });
+
+    var s = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" font-family="Inter, Helvetica Neue, Arial, sans-serif">'];
+    // quarter gridlines + labels
+    var d = new Date(tMin); var q = new Date(Date.UTC(d.getUTCFullYear(), Math.floor(d.getUTCMonth() / 3) * 3 + 3, 1));
+    for (var g = q.getTime(); g < tMax; ) {
+      var gx = X(g), gd = new Date(g);
+      s.push('<line x1="' + gx + '" y1="' + (top - 6) + '" x2="' + gx + '" y2="' + (H - bottom) + '" stroke="#E4E5E8"/>');
+      s.push('<text x="' + (gx + 3) + '" y="' + (top - 10) + '" font-size="10" fill="#6B6F78">Q' + (Math.floor(gd.getUTCMonth() / 3) + 1) + ' ' + String(gd.getUTCFullYear()).slice(2) + '</text>');
+      g = Date.UTC(gd.getUTCFullYear(), gd.getUTCMonth() + 3, 1);
+    }
+    rows.forEach(function (r, i) {
+      var y = top + i * rowH, bh = Math.max(8, rowH * 0.56), by = y + (rowH - bh) / 2;
+      var c = colorFor(r.sector, sectors.indexOf(r.sector));
+      var bx = X(r.start), bw = Math.max(3, X(r.finish) - bx), pct = Math.max(0, Math.min(1, r.pct > 1.5 ? r.pct / 100 : r.pct));
+      var risk = /risk|behind|late/i.test(r.status || '');
+      if (i % 2 === 0) s.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + rowH + '" fill="#F7F7F8"/>');
+      s.push('<g class="row" data-i="' + i + '">');
+      s.push('<text x="10" y="' + (y + rowH / 2 + 4) + '" font-size="' + Math.min(12, rowH * 0.5) + '" fill="#1F2024">' + esc(r.project.length > 44 ? r.project.slice(0, 42) + '…' : r.project) + '</text>');
+      s.push('<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh + '" rx="3" fill="' + c + '" fill-opacity="0.22"/>');
+      s.push('<rect x="' + bx + '" y="' + by + '" width="' + (bw * pct) + '" height="' + bh + '" rx="3" fill="' + c + '"/>');
+      if (bw > 34 && bh >= 11) s.push('<text x="' + (bx + 4) + '" y="' + (by + bh / 2 + 3.5) + '" font-size="9.5" font-weight="600" fill="#fff">' + Math.round(pct * 100) + '%</text>');
+      if (risk) s.push('<circle cx="' + (bx + bw + 7) + '" cy="' + (by + bh / 2) + '" r="4" fill="#D9822B"/>');
+      s.push('<text x="' + (W - padR) + '" y="' + (y + rowH / 2 + 4) + '" font-size="11" font-weight="600" text-anchor="end" fill="#1F2024">' + money(r.value) + '</text>');
+      s.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + rowH + '" fill="transparent"/>');
+      s.push('</g>');
+    });
+    if (now > tMin && now < tMax) {
+      var nx = X(now);
+      s.push('<line x1="' + nx + '" y1="' + (top - 6) + '" x2="' + nx + '" y2="' + (H - bottom + 4) + '" stroke="#8A2432" stroke-width="1.5" stroke-dasharray="4 3"/>');
+      s.push('<text x="' + nx + '" y="' + (H - bottom + 16) + '" font-size="10" font-weight="700" text-anchor="middle" fill="#8A2432">Today</text>');
+    }
+    // legend
+    var lx = 10;
+    sectors.forEach(function (sec, i) {
+      s.push('<rect x="' + lx + '" y="' + (H - 13) + '" width="9" height="9" rx="2" fill="' + colorFor(sec, i) + '"/>');
+      s.push('<text x="' + (lx + 13) + '" y="' + (H - 5) + '" font-size="10" fill="#6B6F78">' + esc(sec) + '</text>');
+      lx += 22 + sec.length * 5.6;
+    });
+    s.push('<text x="10" y="14" font-size="10" font-weight="700" letter-spacing="0.6" fill="#6B6F78">PROJECT</text>');
+    s.push('<text x="' + (W - padR) + '" y="14" font-size="10" font-weight="700" letter-spacing="0.6" text-anchor="end" fill="#6B6F78">CONTRACT</text>');
+    s.push('</svg>');
+    stage.innerHTML = s.join('');
+    stage.querySelectorAll('g.row').forEach(function (g) {
+      var r = rows[+g.getAttribute('data-i')];
+      g.addEventListener('mousemove', function (e) {
+        tip.innerHTML = '<b>' + esc(r.project) + '</b><br>' + esc(r.sector) + '<br>' + fmtDate(r.start) + ' → ' + fmtDate(r.finish) +
+          '<br>' + Math.round((r.pct > 1.5 ? r.pct / 100 : r.pct) * 100) + '% complete · ' + money(r.value) + '<br>Status: ' + esc(r.status || '—');
+        tip.style.display = 'block';
+        tip.style.left = Math.min(e.clientX + 12, W - 290) + 'px'; tip.style.top = Math.min(e.clientY + 12, H - 110) + 'px';
+      });
+      g.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+    });
+    badge.textContent = state.mode === 'sample' ? 'Sample data — bind a source in the editor panel' : '';
+  }
+
+  // ---- Sigma wiring
+  var sdk = window.sigmaComputing && window.sigmaComputing.plugin;
+  var client = sdk && sdk.client;
+  var inIframe = (function () { try { return window.self !== window.top; } catch (e) { return true; } })();
+  var FIELDS = ['project', 'sector', 'start', 'finish', 'pct', 'value', 'status'];
+  if (client && inIframe) {
+    try {
+      client.config.configureEditorPanel([
+        { name: 'source', type: 'element', label: 'Projects table' },
+        { name: 'project', type: 'column', source: 'source', allowMultiple: false, label: 'Project' },
+        { name: 'sector', type: 'column', source: 'source', allowMultiple: false, label: 'Sector' },
+        { name: 'start', type: 'column', source: 'source', allowMultiple: false, label: 'Start date' },
+        { name: 'finish', type: 'column', source: 'source', allowMultiple: false, label: 'Finish date' },
+        { name: 'pct', type: 'column', source: 'source', allowMultiple: false, label: '% complete' },
+        { name: 'value', type: 'column', source: 'source', allowMultiple: false, label: 'Contract value ($M)' },
+        { name: 'status', type: 'column', source: 'source', allowMultiple: false, label: 'Schedule status' }
+      ]);
+    } catch (e) { console.warn(e); }
+    var unsub = [], curSrc = null, data = null;
+    function colId(v) { return v && typeof v === 'object' ? (v.columnId || v.id) : v; }
+    function rebuild() {
+      if (!data) return;
+      var c = {}; FIELDS.forEach(function (f) { c[f] = colId(state.cfg[f]); });
+      var proj = data[c.project]; if (!proj || !proj.length) return;
+      state.rows = proj.map(function (p, i) {
+        var g = function (f) { var col = data[c[f]]; return col ? col[i] : null; };
+        return { project: p, sector: g('sector') || '', start: toTime(g('start')), finish: toTime(g('finish')),
+                 pct: +g('pct') || 0, value: +g('value') || 0, status: g('status') || '' };
+      });
+      state.mode = 'live'; render();
+    }
+    client.config.subscribe(function (cfg) {
+      state.cfg = cfg || {};
+      var src = state.cfg.source, key = JSON.stringify(src || null);
+      if (key !== curSrc) {
+        curSrc = key; unsub.forEach(function (u) { try { u(); } catch (e) {} }); unsub = []; data = null;
+        var id = src && typeof src === 'object' ? (src.elementId || src.id) : src;
+        [id, 'source'].filter(function (x, i, a) { return x && a.indexOf(x) === i; }).forEach(function (k) {
+          try { unsub.push(client.elements.subscribeToElementData(k, function (d) { if (d && Object.keys(d).length) { data = d; rebuild(); } })); } catch (e) {}
+        });
+      }
+      rebuild();
+    });
+  }
+  if (window.ResizeObserver) new ResizeObserver(function () { render(); }).observe(stage); else render();
+  render();
+})();
+</script>
+</body>
+</html>
